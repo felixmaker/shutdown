@@ -15,7 +15,7 @@ enum Message {
 async fn main() {
     
     let app = app::App::default();
-    let mut main_window = window::Window::new(100, 100, 280, 130, "Shutdown");
+    let mut main_window = window::Window::new(100, 100, 280, 130, "Shutdown Scheduler");
 
     let (s, r) = app::channel();
     

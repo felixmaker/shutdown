@@ -717,7 +717,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "shutdown"
+name = "shutdown-scheduler"
 version = "0.1.0"
 dependencies = [
  "fltk",
