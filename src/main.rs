@@ -1,88 +1,157 @@
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+// Copyright (c) 2023, felixmaker
+// SPDX-License-Identifier: MIT
 
-use fltk::{prelude::*, *};
-use system_shutdown::shutdown;
-use tokio::task::JoinHandle;
+use std::rc::Rc;
 
-#[derive(Clone, Copy)]
-enum Message {
-    Schedule,
-    Cancel,
-    Update(std::time::Duration)
+use chrono::prelude::*;
+use slint::{Timer, TimerMode};
+
+fn caculate_future_time(seconds: i32) -> String {
+    let local: DateTime<Local> = Local::now();
+    let future = local + chrono::Duration::seconds(seconds as i64);
+    future.format("%Y-%m-%d %H:%M:%S").to_string()
 }
 
-#[tokio::main]
-async fn main() {
-    
-    let app = app::App::default();
-    let mut main_window = window::Window::new(100, 100, 280, 130, "Shutdown Scheduler");
+fn main() {
+    let main_window = MainWindow::new().unwrap();
+    let timer = Rc::new(Timer::default());
 
-    let (s, r) = app::channel();
-    
-    let mut vpack = group::Pack::new(0, 0, 260, 100, None)
-        .center_of_parent();
+    main_window.on_caculate_future_time(|seconds| caculate_future_time(seconds).into());
 
-    vpack.set_spacing(10);
+    main_window.on_send_shutdown_signal({
+        let timer = timer.clone();
+        move |seconds| {
+            timer.stop();
+            timer.start(
+                TimerMode::SingleShot,
+                std::time::Duration::from_secs(seconds as u64),
+                move || {
+                    let _ = system_shutdown::shutdown();
+                },
+            );
+        }
+    });
 
-    frame::Frame::new(0, 0, 260, 20, "Shutdown computer in: ")
-        .set_align(enums::Align::Left | enums::Align::Inside);
+    main_window.on_cancal_shutdown_signal({
+        let timer = timer.clone();
+        move || {
+            timer.stop();
+        }
+    });
 
-    let mut duration_input = input::Input::new(0, 0, 260, 30, None);
-    duration_input.set_value("5min");
-    
-    let mut hpack = group::Pack::new(0, 0, 260, 30, None)
-        .with_type(group::PackType::Horizontal);    
-    hpack.set_spacing(10);
-    let mut schedule_button = button::Button::new(0, 0, 125, 30, "Schedule");
-    schedule_button.emit(s, Message::Schedule);
-    button::Button::new(0, 0, 125, 30, "Cancel").emit(s, Message::Cancel);
-    hpack.end();
+    main_window.run().unwrap();
+}
 
-    vpack.end();
+slint::slint! {
+    import { HorizontalBox , SpinBox, VerticalBox, Button, Slider} from "std-widgets.slint";
+    export component MainWindow inherits Window {
+        default-font-size: 14px;
+        min-width: 300px;
+        min-height: 200px;
+        max-height: 250px;
+        title: @tr("Shutdown Scheduler");
 
-    main_window.end();
-    main_window.show();
+        callback send-shutdown-signal(int);
+        callback cancal-shutdown-signal();
+        callback caculate_future_time(int) -> string;
 
-    let mut jobs: Vec<JoinHandle<()>> = Vec::new();
+        property <bool> commit-enabled: true;
+        property <string> status: @tr("Unplanned");
 
-    while app.wait() {
-        if let Some(msg) = r.recv() {
-            match msg {
-                Message::Schedule => {
-                    let duration_input_value = duration_input.value();
-                    if let Ok(duration) = humantime::parse_duration(&duration_input_value) {   
-                        let end_time = tokio::time::Instant::now() + duration.into();
-                        let times = duration.as_secs() / 1 + 1;
-                        duration_input.deactivate();
-                        schedule_button.deactivate();
-                        jobs.push(tokio::spawn(async move {
-                            if let Err(_) = tokio::time::timeout_at(end_time, async {
-                                let mut interval = tokio::time::interval(std::time::Duration::from_secs(1));
-                                for _ in 0..times {
-                                    interval.tick().await;
-                                    let time_left = end_time - tokio::time::Instant::now();
-                                    s.send(Message::Update(time_left))
-                                }
-                                shutdown().unwrap();                                
-                            }).await {
-                                shutdown().unwrap();
-                            }
-                        }));
+        in-out property <float> hours;
+        in-out property <float> minutes;
+        in-out property <float> seconds;
+
+        function total_seconds() -> int {
+            return root.hours * 3600 + root.minutes * 60 + root.seconds;
+        }
+
+        property <length> slider-width: 200px;
+        property <length> slider-height: 20px;
+
+        VerticalBox {
+            padding: 15px;
+            spacing: 10px;
+
+            Text {
+                height: 20px;
+                text: @tr("Send shutdown signal in...");
+            }
+
+            GridLayout {
+                spacing: 8px;
+
+                Row {
+                    Text { text: @tr("Hours: ");}
+                    Slider {
+                        maximum: 24;
+                        value <=> root.hours;
+                    }
+                    Text {
+                        width: 20px;
+                        height: 20px;
+                        text: Math.ceil(root.hours);
                     }
                 }
-                Message::Cancel => {
-                    for job in &jobs {
-                        job.abort();
-                    }
-                    schedule_button.activate();
-                    duration_input.activate();
 
+                Row {
+                    Text { text: @tr("Minutes: ");}
+                    Slider {
+                        maximum: 60;
+                        value <=> root.minutes;
+                    }
+                    Text {
+                        width: 20px;
+                        height: 20px;
+                        text: Math.ceil(root.minutes);
+                    }
                 }
-                Message::Update(time_left) => {                    
-                    let human_time = format!("{}", humantime::format_duration(time_left));
-                    duration_input.set_value(&human_time);
+
+                Row {
+                    Text { text: @tr("Seconds: ");}
+                    Slider {
+                        maximum: 60;
+                        value <=> root.seconds;
+                    }
+                    Text {
+                        width: 20px;
+                        height: 20px;
+                        text: Math.ceil(root.seconds);
+                    }
                 }
             }
+
+            HorizontalBox {
+                padding: 0px;
+
+                Button {
+                    text: @tr("Commit");
+                    height: 30px;
+                    primary: true;
+                    enabled <=> root.commit-enabled;
+
+                    clicked => {
+                        root.send-shutdown-signal(root.total_seconds());
+                        root.commit-enabled = false;
+                        root.status = root.caculate-future-time(root.total_seconds());
+                    }
+                }
+                Button { text: @tr("Reset"); height: 30px;
+                    clicked => {
+                        root.cancal-shutdown-signal();
+                        root.hours = 0;
+                        root.minutes = 0;
+                        root.seconds = 0;
+                        root.commit-enabled = true;
+                        root.status = @tr("Unplanned");
+                    }
+                }
+            }
+
+            Text {
+                text: @tr("Shutdown time: {}", root.status);
+            }
         }
+
     }
 }
