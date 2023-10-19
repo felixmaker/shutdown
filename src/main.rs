@@ -1,5 +1,6 @@
 // Copyright (c) 2023, felixmaker
 // SPDX-License-Identifier: MIT
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::rc::Rc;
 
