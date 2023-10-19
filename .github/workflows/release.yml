@@ -7,6 +7,9 @@ on:
     tags:
       - 'v*.*.*'
 
+env:
+  PROJECT_NAME: shutdown-scheduler
+
 jobs:
   release:
     strategy:
@@ -45,23 +48,23 @@ jobs:
       - uses: actions/checkout@v3
       - name: Build release for ${{ matrix.target }}
         run: cargo build --release --target=${{ matrix.target }}
-      - name: Zip and calculate Sha256 (Windows)
+      - name: Package and calculate Sha256 (Windows)
         if: matrix.os == 'windows-latest'
         shell: bash
         run: |
-          7z a shutdown-scheduler-${{ steps.get_version.outputs.version }}-${{ matrix.code-target }}.zip  ./LICENSE ./README.md ./target/${{ matrix.target }}/release/ugdown${{ matrix.binary_postfix }}
-          sha256sum shutdown-scheduler-${{ steps.get_version.outputs.version }}-${{ matrix.code-target }}.zip > shutdown-scheduler-${{ steps.get_version.outputs.version }}-${{ matrix.code-target }}.zip.sha256sum
-      - name: Zip and calculate Sha256 (Not Windows)
+          7z a $PROJECT_NAME-${{ steps.get_version.outputs.version }}-${{ matrix.code-target }}.zip  ./LICENSE ./README.md ./target/${{ matrix.target }}/release/$PROJECT_NAME${{ matrix.binary_postfix }}
+          sha256sum $PROJECT_NAME-${{ steps.get_version.outputs.version }}-${{ matrix.code-target }}.zip > $PROJECT_NAME-${{ steps.get_version.outputs.version }}-${{ matrix.code-target }}.zip.sha256sum
+      - name: Package and calculate Sha256 (Not Windows)
         if: matrix.os != 'windows-latest'
         shell: bash
         run: |
-          tar czvf shutdown-scheduler-${{ steps.get_version.outputs.version }}-${{ matrix.code-target }}.tar.gz README.md LICENSE -C ./target/${{ matrix.target }}/release shutdown-scheduler${{ matrix.binary_postfix }}
-          shasum -a 256 shutdown-scheduler-${{ steps.get_version.outputs.version }}-${{ matrix.code-target }}.tar.gz > shutdown-scheduler-${{ steps.get_version.outputs.version }}-${{ matrix.code-target }}.tar.gz.sha256sum 
+          tar czvf $PROJECT_NAME-${{ steps.get_version.outputs.version }}-${{ matrix.code-target }}.tar.gz README.md LICENSE -C ./target/${{ matrix.target }}/release $PROJECT_NAME${{ matrix.binary_postfix }}
+          shasum -a 256 $PROJECT_NAME-${{ steps.get_version.outputs.version }}-${{ matrix.code-target }}.tar.gz > $PROJECT_NAME-${{ steps.get_version.outputs.version }}-${{ matrix.code-target }}.tar.gz.sha256sum 
       - name: Upload binaries to release
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: shutdown-scheduler-*[.zip][.tar.gz]*
+          file: $PROJECT_NAME-*[.zip][.tar.gz]*
           file_glob: true
           tag: ${{ github.ref }}
           overwrite: true
